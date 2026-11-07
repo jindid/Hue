@@ -1,0 +1,14 @@
+{
+  "name": "Hue Music Sync",
+  "short_name": "HueSync",
+  "description": "Synchronise tes lumières Philips Hue avec la musique (YouTube Music, etc.)",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#14161c",
+  "theme_color": "#14161c",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

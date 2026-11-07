@@ -1,0 +1,601 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#14161c">
+<title>Hue Music Sync</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<style>
+  :root {
+    --bg: #14161c; --card: #22252d; --card2: #2c3039; --text: #f3f4f7; --muted: #9aa1ae;
+    --accent: #7b5cff; --accent2: #ff3d9a; --ok: #2ecc71; --warn: #f5a623; --err: #ff5470;
+    --radius: 18px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; -webkit-tap-highlight-color: transparent; }
+  body { min-height: 100vh; padding: 16px 16px calc(32px + env(safe-area-inset-bottom)); max-width: 640px; margin: 0 auto; }
+  h1 { font-size: 28px; margin: 8px 0 4px; line-height: 1.15; }
+  h2 { font-size: 17px; margin: 0 0 12px; }
+  p { margin: 6px 0; }
+  .sub { color: var(--muted); font-size: 14px; }
+  .card { background: var(--card); border-radius: var(--radius); padding: 16px; margin: 14px 0; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .grow { flex: 1 1 160px; min-width: 0; }
+  input[type=text] { width: 100%; background: var(--card2); color: var(--text); border: 1px solid #3a3f4b;
+    border-radius: 12px; padding: 12px; font-size: 16px; }
+  button { background: var(--card2); color: var(--text); border: 0; border-radius: 12px; padding: 12px 16px;
+    font-size: 15px; font-weight: 600; cursor: pointer; }
+  button.primary { background: linear-gradient(135deg, var(--accent2), var(--accent)); }
+  button:disabled { opacity: .45; cursor: default; }
+  a { color: #a99bff; }
+  .steps { margin: 0; padding-left: 20px; color: var(--muted); font-size: 14px; }
+  .steps li { margin: 6px 0; }
+  .status { font-size: 14px; margin-top: 10px; min-height: 1em; }
+  .status.ok { color: var(--ok); } .status.err { color: var(--err); } .status.warn { color: var(--warn); }
+  .hidden { display: none !important; }
+
+  /* grille d'options façon app Hue */
+  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .tile { background: var(--card2); border-radius: 14px; padding: 14px 10px; text-align: center; cursor: pointer;
+    border: 2px solid transparent; font-weight: 600; font-size: 14px; user-select: none; }
+  .tile .ico { font-size: 26px; display: block; margin-bottom: 6px; }
+  .tile.sel { border-color: var(--accent); background: #2f2c45; }
+  .tile small { display: block; color: var(--muted); font-weight: 400; margin-top: 4px; font-size: 12px; }
+  .swatch { display: flex; height: 10px; border-radius: 6px; overflow: hidden; margin-top: 8px; }
+  .swatch i { flex: 1; }
+
+  .lights { display: flex; flex-direction: column; gap: 6px; }
+  .light { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--card2); border-radius: 12px; }
+  .light input { width: 20px; height: 20px; accent-color: var(--accent); }
+  .light .nm { flex: 1; }
+  .light .tag { color: var(--muted); font-size: 12px; }
+  select { background: var(--card2); color: var(--text); border: 1px solid #3a3f4b; border-radius: 12px; padding: 10px; font-size: 15px; width: 100%; }
+
+  .slider { margin: 12px 0; }
+  .slider label { display: flex; justify-content: space-between; font-size: 14px; color: var(--muted); margin-bottom: 4px; }
+  .slider label b { color: var(--text); font-weight: 600; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+
+  /* scène : ampoules virtuelles */
+  .stage { display: flex; flex-wrap: wrap; justify-content: center; gap: 14px; padding: 18px 6px; background: #0d0e12; border-radius: 14px; min-height: 96px; }
+  .bulb { width: 46px; height: 46px; border-radius: 50%; background: #333; transition: background .08s linear, box-shadow .08s linear; }
+  .meters { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+  .meter { background: var(--card2); border-radius: 10px; height: 8px; overflow: hidden; }
+  .meter i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), var(--accent2)); }
+  .meter-l { font-size: 11px; color: var(--muted); text-align: center; margin-top: 4px; }
+  .beat { width: 12px; height: 12px; border-radius: 50%; background: #444; display: inline-block; vertical-align: middle; margin-left: 6px; transition: background .05s; }
+  .beat.on { background: var(--accent2); box-shadow: 0 0 10px var(--accent2); }
+
+  .bigbtn { width: 100%; padding: 18px; font-size: 18px; border-radius: 16px; }
+  .footer { color: var(--muted); font-size: 12px; text-align: center; margin-top: 24px; }
+  details summary { cursor: pointer; color: var(--muted); font-size: 14px; }
+</style>
+</head>
+<body>
+
+<h1>Hue Music Sync</h1>
+<p class="sub">Tes lumières Hue qui bougent au rythme de YouTube Music (ou n'importe quelle musique).</p>
+
+<!-- 1. CONNEXION AU PONT -->
+<section class="card" id="cardBridge">
+  <h2>1 · Connexion au pont Hue</h2>
+  <div id="bridgeSetup">
+    <ol class="steps">
+      <li>Ton téléphone doit être sur le <b>même Wi-Fi</b> que le pont Hue.</li>
+      <li>Trouve l'adresse IP du pont (bouton ci-dessous, ou appli Hue → Paramètres → Ponts Hue → ⓘ).</li>
+      <li><b>Une seule fois :</b> ouvre <a id="certLink" href="#" target="_blank" rel="noopener">https://IP-du-pont</a>, puis « Paramètres avancés » → « Continuer vers le site » pour accepter son certificat. Reviens ensuite ici.</li>
+      <li>Appuie sur le <b>gros bouton rond du pont</b>, puis sur « Connecter » dans les 30 secondes.</li>
+    </ol>
+    <div class="row" style="margin-top:12px">
+      <div class="grow"><input type="text" id="ip" placeholder="ex. 192.168.1.20" inputmode="decimal" autocomplete="off"></div>
+      <button id="btnDiscover">Rechercher</button>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button class="primary grow" id="btnPair">Connecter</button>
+      <button id="btnDemo" title="Tester sans pont">Mode démo</button>
+    </div>
+  </div>
+  <div id="bridgeOk" class="hidden">
+    <div class="row">
+      <div class="grow">✅ Connecté au pont <b id="ipLabel"></b></div>
+      <button id="btnForget">Déconnecter</button>
+    </div>
+  </div>
+  <div class="status" id="bridgeStatus"></div>
+</section>
+
+<!-- 2. LAMPES -->
+<section class="card hidden" id="cardLights">
+  <h2>2 · Lampes à synchroniser</h2>
+  <select id="room"></select>
+  <div class="lights" id="lights" style="margin-top:10px"></div>
+  <p class="sub" style="margin-top:10px">Astuce : 2 à 6 lampes donnent le meilleur effet (le pont accepte ~10 à 20 ordres par seconde au total).</p>
+</section>
+
+<!-- 3. SOURCE AUDIO -->
+<section class="card hidden" id="cardSource">
+  <h2>3 · Source du son</h2>
+  <div class="grid" id="sources">
+    <div class="tile sel" data-src="mic"><span class="ico">🎤</span>Micro<small>Lance YouTube Music sur une enceinte ou ce téléphone</small></div>
+    <div class="tile" data-src="tab"><span class="ico">🖥️</span>Onglet / écran<small>Sur PC : capte le son d'un onglet YouTube Music</small></div>
+  </div>
+</section>
+
+<!-- 4. EFFETS -->
+<section class="card hidden" id="cardFx">
+  <h2>4 · Effet</h2>
+  <div class="grid" id="modes"></div>
+  <h2 style="margin-top:18px">Palette</h2>
+  <div class="grid" id="palettes"></div>
+
+  <div class="slider"><label>Sensibilité <b id="vSens"></b></label><input type="range" id="sens" min="1" max="10" step="1"></div>
+  <div class="slider"><label>Luminosité max <b id="vMax"></b></label><input type="range" id="maxBri" min="10" max="100" step="5"></div>
+  <div class="slider"><label>Luminosité min <b id="vMin"></b></label><input type="range" id="minBri" min="0" max="60" step="5"></div>
+  <div class="slider"><label>Vitesse des couleurs <b id="vSpeed"></b></label><input type="range" id="speed" min="1" max="10" step="1"></div>
+  <details>
+    <summary>Réglages avancés</summary>
+    <div class="slider"><label>Ordres envoyés au pont / seconde <b id="vRate"></b></label><input type="range" id="rate" min="4" max="25" step="1"></div>
+    <div class="slider"><label>Fluidité des transitions <b id="vSmooth"></b></label><input type="range" id="smooth" min="0" max="4" step="1"></div>
+    <label class="row" style="font-size:14px;color:var(--muted);margin-top:8px"><input type="checkbox" id="restore" style="accent-color:var(--accent)"> Remettre les lampes comme avant à l'arrêt</label>
+  </details>
+</section>
+
+<!-- 5. LIVE -->
+<section class="card hidden" id="cardLive">
+  <div class="stage" id="stage"></div>
+  <div class="meters">
+    <div><div class="meter"><i id="mBass"></i></div><div class="meter-l">Basses</div></div>
+    <div><div class="meter"><i id="mMid"></i></div><div class="meter-l">Médiums</div></div>
+    <div><div class="meter"><i id="mHigh"></i></div><div class="meter-l">Aigus</div></div>
+  </div>
+  <p class="sub" style="text-align:center;margin-top:10px">Beat <span class="beat" id="beatDot"></span> · <span id="bpm">— BPM</span> · <span id="sent">0</span> ordres/s</p>
+  <button class="primary bigbtn" id="btnStart" style="margin-top:12px">▶ Lancer la synchro</button>
+  <div class="status" id="liveStatus"></div>
+</section>
+
+<p class="footer">Garde l'écran allumé pendant la synchro (l'appli essaie de l'empêcher de se mettre en veille).<br>Fonctionne en local : rien n'est envoyé sur Internet.</p>
+
+<script>
+'use strict';
+/* =========================================================================
+   Stockage des réglages
+   ========================================================================= */
+const LS = 'huesync.v1';
+const DEFAULTS = { ip: '', user: '', room: 'all', selected: [], src: 'mic', mode: 'pulse', palette: 'neon',
+  sens: 6, maxBri: 100, minBri: 5, speed: 5, rate: 12, smooth: 1, restore: true };
+let cfg = { ...DEFAULTS };
+try { Object.assign(cfg, JSON.parse(localStorage.getItem(LS) || '{}')); } catch (e) {}
+const save = () => { try { localStorage.setItem(LS, JSON.stringify(cfg)); } catch (e) {} };
+const $ = id => document.getElementById(id);
+const DEMO = '__demo__';
+
+/* =========================================================================
+   API du pont Hue (API locale v1, en HTTPS)
+   ========================================================================= */
+async function hue(path, method = 'GET', body) {
+  const url = `https://${cfg.ip}/api${path}`;
+  const opt = { method };
+  if (body !== undefined) opt.body = JSON.stringify(body); // pas de Content-Type -> requête plus simple pour le CORS
+  const r = await fetch(url, opt);
+  return r.json();
+}
+const userPath = p => `/${cfg.user}${p}`;
+
+function setStatus(el, msg, kind = '') { const s = $(el); s.textContent = msg; s.className = 'status ' + kind; }
+
+function updateCertLink() {
+  const ip = $('ip').value.trim();
+  $('certLink').href = ip ? `https://${ip}/` : '#';
+  $('certLink').textContent = ip ? `https://${ip}` : 'https://IP-du-pont';
+}
+
+async function discover() {
+  setStatus('bridgeStatus', 'Recherche du pont…');
+  try {
+    const r = await fetch('https://discovery.meethue.com/');
+    const list = await r.json();
+    if (Array.isArray(list) && list.length) {
+      $('ip').value = list[0].internalipaddress; updateCertLink();
+      setStatus('bridgeStatus', `Pont trouvé : ${list[0].internalipaddress}. Accepte son certificat (étape 3), puis appuie sur le bouton du pont et « Connecter ».`, 'ok');
+    } else setStatus('bridgeStatus', 'Aucun pont trouvé automatiquement. Saisis son IP à la main (appli Hue → Paramètres → Ponts Hue).', 'warn');
+  } catch (e) {
+    setStatus('bridgeStatus', 'Recherche automatique impossible. Saisis l\'IP du pont à la main (appli Hue → Paramètres → Ponts Hue → ⓘ).', 'warn');
+  }
+}
+
+async function pair() {
+  const ip = $('ip').value.trim();
+  if (!/^[\w.\-:]+$/.test(ip)) return setStatus('bridgeStatus', 'Saisis l\'adresse IP du pont.', 'err');
+  cfg.ip = ip; save();
+  setStatus('bridgeStatus', 'Connexion…');
+  try {
+    const res = await hue('', 'POST', { devicetype: 'huesync#web' });
+    const r = res && res[0];
+    if (r && r.success) {
+      cfg.user = r.success.username; save();
+      setStatus('bridgeStatus', 'Connecté !', 'ok');
+      await afterConnect();
+    } else if (r && r.error && r.error.type === 101) {
+      setStatus('bridgeStatus', 'Appuie d\'abord sur le gros bouton rond du pont, puis réessaie dans les 30 secondes.', 'warn');
+    } else {
+      setStatus('bridgeStatus', 'Réponse inattendue du pont : ' + JSON.stringify(res), 'err');
+    }
+  } catch (e) {
+    setStatus('bridgeStatus', 'Impossible de joindre le pont. Vérifie le Wi-Fi et l\'IP, et ouvre le lien de l\'étape 3 pour accepter le certificat. Si Chrome demande l\'accès au réseau local, autorise-le.', 'err');
+  }
+}
+
+/* =========================================================================
+   Lampes & pièces
+   ========================================================================= */
+let allLights = {};   // id -> {name, type, colorful}
+let rooms = [];       // [{id, name, lights:[ids]}]
+
+async function loadLights() {
+  if (cfg.user === DEMO) {
+    allLights = { 1: { name: 'Plafonnier', colorful: true }, 2: { name: 'Lightstrip TV', colorful: true },
+      3: { name: 'Lampe canapé', colorful: true }, 4: { name: 'Hue Go', colorful: true }, 5: { name: 'Bureau', colorful: true } };
+    rooms = [{ id: 'r1', name: 'Salon', lights: ['1', '2', '3', '4'] }, { id: 'r2', name: 'Bureau', lights: ['5'] }];
+    return true;
+  }
+  const [lights, groups] = await Promise.all([hue(userPath('/lights')), hue(userPath('/groups'))]);
+  if (Array.isArray(lights) && lights[0] && lights[0].error) {
+    if (lights[0].error.type === 1) { cfg.user = ''; save(); }
+    throw new Error(lights[0].error.description);
+  }
+  allLights = {};
+  for (const [id, l] of Object.entries(lights)) {
+    const colorful = !!(l.state && (l.state.hue !== undefined || l.state.xy));
+    allLights[id] = { name: l.name, colorful, reachable: l.state ? l.state.reachable !== false : true };
+  }
+  rooms = Object.entries(groups || {}).filter(([, g]) => g.type === 'Room' || g.type === 'Zone' || g.type === 'Entertainment')
+    .map(([id, g]) => ({ id, name: g.name + (g.type === 'Zone' ? ' (zone)' : g.type === 'Entertainment' ? ' (divertissement)' : ''), lights: g.lights || [] }));
+  return true;
+}
+
+function renderRooms() {
+  const sel = $('room');
+  sel.innerHTML = '<option value="all">Toutes les lampes</option>' + rooms.map(r => `<option value="${r.id}">${esc(r.name)}</option>`).join('');
+  if (![...sel.options].some(o => o.value === cfg.room)) cfg.room = 'all';
+  sel.value = cfg.room;
+  renderLights();
+}
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+function renderLights() {
+  const room = rooms.find(r => r.id === cfg.room);
+  const ids = room ? room.lights : Object.keys(allLights);
+  const valid = ids.filter(id => allLights[id]);
+  // si aucune sélection mémorisée dans cette vue, tout cocher (lampes couleur)
+  if (!cfg.selected.some(id => valid.includes(id))) cfg.selected = valid.filter(id => allLights[id].colorful);
+  $('lights').innerHTML = valid.map(id => {
+    const l = allLights[id];
+    return `<label class="light"><input type="checkbox" data-id="${id}" ${cfg.selected.includes(id) ? 'checked' : ''}>
+      <span class="nm">${esc(l.name)}</span><span class="tag">${l.colorful ? 'couleur' : 'blanc'}${l.reachable === false ? ' · injoignable' : ''}</span></label>`;
+  }).join('') || '<p class="sub">Aucune lampe dans cette pièce.</p>';
+  cfg.selected = cfg.selected.filter(id => valid.includes(id));
+  save(); renderStage();
+}
+
+function selectedIds() { return cfg.selected.filter(id => allLights[id]); }
+
+/* =========================================================================
+   Effets & palettes
+   ========================================================================= */
+// Palettes : liste de [teinte en degrés, saturation 0..1]
+const PALETTES = {
+  neon:    { name: 'Néon',            cols: [[320, 1], [275, 1], [190, 1], [300, .9]] },
+  sunset:  { name: 'Coucher de soleil', cols: [[5, 1], [25, 1], [340, .9], [40, .95]] },
+  ocean:   { name: 'Océan',           cols: [[200, 1], [180, 1], [230, 1], [165, .9]] },
+  fire:    { name: 'Feu',             cols: [[0, 1], [15, 1], [30, 1], [45, 1]] },
+  forest:  { name: 'Forêt',           cols: [[110, 1], [140, .9], [80, 1], [170, .8]] },
+  rainbow: { name: 'Arc-en-ciel',     cols: [[0, 1], [60, 1], [120, 1], [180, 1], [240, 1], [300, 1]] },
+};
+const MODES = {
+  pulse:    { name: 'Pulsation', ico: '💓', desc: 'Tout pulse sur les basses, la couleur change à chaque beat' },
+  spectrum: { name: 'Spectre',   ico: '🎚️', desc: 'Chaque lampe suit basses, médiums ou aigus' },
+  flash:    { name: 'Flash',     ico: '⚡', desc: 'Une lampe s\'allume fort à chaque beat, au hasard' },
+  wave:     { name: 'Vague',     ico: '🌊', desc: 'Les couleurs défilent d\'une lampe à l\'autre' },
+};
+
+function renderPickers() {
+  $('modes').innerHTML = Object.entries(MODES).map(([k, m]) =>
+    `<div class="tile ${cfg.mode === k ? 'sel' : ''}" data-mode="${k}"><span class="ico">${m.ico}</span>${m.name}<small>${m.desc}</small></div>`).join('');
+  $('palettes').innerHTML = Object.entries(PALETTES).map(([k, p]) =>
+    `<div class="tile ${cfg.palette === k ? 'sel' : ''}" data-pal="${k}">${p.name}<div class="swatch">${p.cols.map(c => `<i style="background:hsl(${c[0]} ${c[1] * 100}% 55%)"></i>`).join('')}</div></div>`).join('');
+  for (const t of $('sources').children) t.classList.toggle('sel', t.dataset.src === cfg.src);
+}
+
+/* =========================================================================
+   Analyse audio : niveaux par bande + détection de beat
+   ========================================================================= */
+const audio = { ctx: null, stream: null, analyser: null, data: null,
+  bands: { bass: 0, mid: 0, high: 0 }, peaks: { bass: .1, mid: .1, high: .1 },
+  bassAvg: 0, bassVar: 0, lastBeat: 0, beat: false, beatTimes: [] };
+
+async function startAudio() {
+  let stream;
+  if (cfg.src === 'tab') {
+    if (!navigator.mediaDevices.getDisplayMedia) throw new Error('La capture d\'onglet n\'est pas disponible sur cet appareil (sur Android, utilise le micro).');
+    stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }, systemAudio: 'include' });
+    if (!stream.getAudioTracks().length) { stream.getTracks().forEach(t => t.stop()); throw new Error('Aucun son capté : coche « Partager l\'audio de l\'onglet » dans la fenêtre de partage.'); }
+    stream.getVideoTracks().forEach(t => t.stop()); // on ne garde que le son
+  } else {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+  }
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  await ctx.resume();
+  const src = ctx.createMediaStreamSource(stream);
+  const an = ctx.createAnalyser();
+  an.fftSize = 2048; an.smoothingTimeConstant = 0.55; an.minDecibels = -90; an.maxDecibels = -15;
+  src.connect(an);
+  Object.assign(audio, { ctx, stream, analyser: an, data: new Uint8Array(an.frequencyBinCount) });
+  stream.getAudioTracks()[0].addEventListener('ended', () => { if (running) stop('La source audio s\'est arrêtée.'); });
+}
+function stopAudio() {
+  if (audio.stream) audio.stream.getTracks().forEach(t => t.stop());
+  if (audio.ctx) audio.ctx.close();
+  audio.ctx = audio.stream = audio.analyser = null;
+}
+
+function bandEnergy(f0, f1) {
+  const hz = audio.ctx.sampleRate / audio.analyser.fftSize;
+  const a = Math.max(1, Math.floor(f0 / hz)), b = Math.min(audio.data.length - 1, Math.ceil(f1 / hz));
+  let s = 0; for (let i = a; i <= b; i++) s += audio.data[i];
+  return s / ((b - a + 1) * 255);
+}
+
+function analyse(now) {
+  audio.analyser.getByteFrequencyData(audio.data);
+  const raw = { bass: bandEnergy(30, 150), mid: bandEnergy(150, 2000), high: bandEnergy(2000, 9000) };
+  const sens = cfg.sens / 10;
+  for (const k of ['bass', 'mid', 'high']) {
+    // normalisation automatique : on suit le pic récent qui redescend lentement
+    audio.peaks[k] = Math.max(raw[k], audio.peaks[k] * 0.996, 0.05);
+    const floor = audio.peaks[k] * (0.55 - sens * 0.3);  // plus sensible = plancher plus bas
+    const v = Math.max(0, Math.min(1, (raw[k] - floor) / (audio.peaks[k] - floor + 1e-6)));
+    audio.bands[k] = audio.bands[k] * 0.35 + v * 0.65;
+  }
+  // détection de beat sur les basses : énergie nettement au-dessus de la moyenne glissante
+  const e = raw.bass;
+  const diff = e - audio.bassAvg;
+  audio.bassAvg += diff * 0.06;
+  audio.bassVar = audio.bassVar * 0.94 + diff * diff * 0.06;
+  const k = 1.9 - sens * 1.1; // 0.8 (très sensible) .. 1.8
+  audio.beat = false;
+  if (diff > k * Math.sqrt(audio.bassVar) && e > 0.12 && now - audio.lastBeat > 260) {
+    audio.beat = true;
+    if (now - audio.lastBeat < 2000) { audio.beatTimes.push(now - audio.lastBeat); if (audio.beatTimes.length > 16) audio.beatTimes.shift(); }
+    audio.lastBeat = now;
+  }
+}
+function bpm() {
+  if (audio.beatTimes.length < 4) return null;
+  const s = [...audio.beatTimes].sort((a, b) => a - b), med = s[s.length >> 1];
+  let b = 60000 / med; while (b < 70) b *= 2; while (b > 180) b /= 2;
+  return Math.round(b);
+}
+
+/* =========================================================================
+   Moteur d'effets : calcule une couleur cible par lampe
+   ========================================================================= */
+const fx = { colorIdx: 0, phase: 0, lights: [] }; // lights[i] = {h, s, v} (h degrés, s/v 0..1)
+
+function palCol(i) { const c = PALETTES[cfg.palette].cols; return c[((i % c.length) + c.length) % c.length]; }
+function mixHue(a, b, t) { let d = ((b - a + 540) % 360) - 180; return (a + d * t + 360) % 360; }
+
+function computeFx(dt) {
+  const ids = selectedIds(), n = ids.length;
+  while (fx.lights.length < n) fx.lights.push({ h: palCol(fx.lights.length)[0], s: 1, v: 0 });
+  fx.lights.length = n;
+  const B = audio.bands, min = cfg.minBri / 100, max = cfg.maxBri / 100, spd = cfg.speed / 10;
+  const level = Math.max(B.bass, B.mid * 0.8);
+  if (audio.beat) fx.colorIdx++;
+  fx.phase += dt * (0.02 + spd * 0.12) * (0.4 + level * 1.6); // la vague accélère quand la musique est forte
+
+  fx.lights.forEach((L, i) => {
+    let th, ts, tv;
+    switch (cfg.mode) {
+      case 'pulse': {
+        const c = palCol(fx.colorIdx + (i % 2)); th = c[0]; ts = c[1];
+        tv = min + (max - min) * Math.pow(B.bass, 1.3);
+        break;
+      }
+      case 'spectrum': {
+        const band = ['bass', 'mid', 'high'][i % 3];
+        const c = palCol(i + Math.floor(fx.colorIdx / 4)); th = c[0]; ts = c[1];
+        tv = min + (max - min) * Math.pow(B[band], 1.2);
+        break;
+      }
+      case 'flash': {
+        if (audio.beat && (i === fx.flashTarget)) { L.v = max; const c = palCol(fx.colorIdx + i); L.h = c[0]; L.s = c[1]; }
+        th = L.h; ts = L.s; tv = Math.max(min, L.v * Math.pow(0.04, dt)); // décroissance rapide
+        L.h = th; L.s = ts; L.v = tv; return;
+      }
+      case 'wave': {
+        const c = PALETTES[cfg.palette].cols, pos = fx.phase + i / Math.max(1, n) * c.length;
+        const a = palCol(Math.floor(pos)), b = palCol(Math.floor(pos) + 1), t = pos % 1;
+        th = mixHue(a[0], b[0], t); ts = a[1] + (b[1] - a[1]) * t;
+        tv = min + (max - min) * (0.35 + 0.65 * level);
+        break;
+      }
+    }
+    // lissage : montée rapide, descente plus douce
+    const up = tv > L.v ? 0.75 : 0.25;
+    L.v += (tv - L.v) * up;
+    L.h = audio.beat || cfg.mode === 'wave' ? th : mixHue(L.h, th, 0.3);
+    L.s = ts;
+  });
+  if (cfg.mode === 'flash' && audio.beat === false) fx.flashTarget = Math.floor(Math.random() * Math.max(1, n));
+}
+
+/* =========================================================================
+   Envoi au pont : débit limité, tourniquet entre les lampes
+   ========================================================================= */
+const sender = { last: {}, rr: 0, inflight: 0, count: 0, timer: null, sentPerSec: 0 };
+
+function hsvToHue(L) {
+  return { on: L.v > 0.01, hue: Math.round(L.h / 360 * 65535) % 65536, sat: Math.round(L.s * 254), bri: Math.max(1, Math.round(L.v * 254)) };
+}
+function differs(a, b) {
+  if (!a) return true;
+  if (a.on !== b.on) return true;
+  const dh = Math.min(Math.abs(a.hue - b.hue), 65536 - Math.abs(a.hue - b.hue));
+  return dh > 600 || Math.abs(a.sat - b.sat) > 12 || Math.abs(a.bri - b.bri) > 8;
+}
+
+function sendTick() {
+  const ids = selectedIds(); if (!ids.length || !running) return;
+  if (cfg.user === DEMO) return;
+  if (sender.inflight > 3) return; // le pont sature : on saute ce tour
+  // on cherche la prochaine lampe dont l'état a changé
+  for (let k = 0; k < ids.length; k++) {
+    const i = (sender.rr + k) % ids.length, id = ids[i], L = fx.lights[i];
+    if (!L) continue;
+    const st = hsvToHue(L), prev = sender.last[id];
+    if (!differs(prev, st)) continue;
+    sender.rr = i + 1;
+    const body = { transitiontime: cfg.smooth };
+    if (!prev || prev.on !== st.on) body.on = st.on;
+    if (st.on) { body.hue = st.hue; body.sat = st.sat; body.bri = st.bri; }
+    sender.last[id] = st;
+    sender.inflight++; sender.count++;
+    hue(userPath(`/lights/${id}/state`), 'PUT', body).catch(() => { sender.last[id] = null; })
+      .finally(() => sender.inflight--);
+    return;
+  }
+}
+
+/* =========================================================================
+   Boucle principale
+   ========================================================================= */
+let running = false, loopTimer = null, lastT = 0, savedStates = null, wakeLock = null;
+
+function renderStage() {
+  const n = selectedIds().length;
+  $('stage').innerHTML = n ? Array.from({ length: n }, () => '<div class="bulb"></div>').join('') : '<p class="sub">Coche au moins une lampe.</p>';
+}
+function drawStage() {
+  const bulbs = $('stage').children;
+  fx.lights.forEach((L, i) => {
+    const b = bulbs[i]; if (!b || !b.classList.contains('bulb')) return;
+    const l = 8 + L.v * 52, col = `hsl(${L.h.toFixed(0)} ${(L.s * 100).toFixed(0)}% ${l.toFixed(0)}%)`;
+    b.style.background = col; b.style.boxShadow = `0 0 ${(L.v * 34).toFixed(0)}px ${(L.v * 10).toFixed(0)}px ${col}`;
+  });
+  $('mBass').style.width = (audio.bands.bass * 100) + '%';
+  $('mMid').style.width = (audio.bands.mid * 100) + '%';
+  $('mHigh').style.width = (audio.bands.high * 100) + '%';
+  if (audio.beat) { $('beatDot').classList.add('on'); setTimeout(() => $('beatDot').classList.remove('on'), 90); }
+}
+
+function tick() {
+  const now = performance.now(), dt = Math.min(0.2, (now - lastT) / 1000); lastT = now;
+  analyse(now); computeFx(dt); drawStage();
+}
+
+async function start() {
+  if (!selectedIds().length) return setStatus('liveStatus', 'Coche au moins une lampe.', 'err');
+  setStatus('liveStatus', cfg.src === 'tab' ? 'Choisis l\'onglet YouTube Music et coche « Partager l\'audio »…' : 'Autorise l\'accès au micro…');
+  try { await startAudio(); }
+  catch (e) { return setStatus('liveStatus', (e && e.name === 'NotAllowedError') ? 'Accès refusé. Autorise le micro / le partage pour cette page.' : (e.message || String(e)), 'err'); }
+
+  if (cfg.restore && cfg.user !== DEMO) {
+    try { const ls = await hue(userPath('/lights')); savedStates = {}; for (const id of selectedIds()) if (ls[id]) savedStates[id] = ls[id].state; } catch (e) { savedStates = null; }
+  }
+  if (cfg.user !== DEMO) await Promise.allSettled(selectedIds().map(id => hue(userPath(`/lights/${id}/state`), 'PUT', { on: true, effect: 'none', alert: 'none' })));
+
+  running = true; sender.last = {}; lastT = performance.now();
+  loopTimer = setInterval(tick, 25);
+  sender.timer = setInterval(sendTick, 1000 / cfg.rate);
+  sender.stat = setInterval(() => { $('sent').textContent = sender.count; sender.count = 0; const b = bpm(); $('bpm').textContent = b ? b + ' BPM' : '— BPM'; }, 1000);
+  try { wakeLock = await navigator.wakeLock?.request('screen'); } catch (e) {}
+  $('btnStart').textContent = '■ Arrêter';
+  setStatus('liveStatus', cfg.user === DEMO ? 'Mode démo : seules les ampoules virtuelles s\'animent.' : 'Synchro en cours. Lance ta musique dans YouTube Music !', 'ok');
+}
+
+async function stop(msg) {
+  running = false;
+  clearInterval(loopTimer); clearInterval(sender.timer); clearInterval(sender.stat);
+  stopAudio();
+  try { wakeLock && wakeLock.release(); } catch (e) {} wakeLock = null;
+  $('btnStart').textContent = '▶ Lancer la synchro';
+  if (savedStates) {
+    const tasks = Object.entries(savedStates).map(([id, s]) => {
+      const b = { on: s.on, bri: s.bri, transitiontime: 4 };
+      if (s.colormode === 'ct' && s.ct) b.ct = s.ct; else if (s.xy) b.xy = s.xy; else if (s.hue !== undefined) { b.hue = s.hue; b.sat = s.sat; }
+      return hue(userPath(`/lights/${id}/state`), 'PUT', b);
+    });
+    await Promise.allSettled(tasks); savedStates = null;
+  }
+  setStatus('liveStatus', msg || 'Synchro arrêtée.', msg ? 'warn' : '');
+}
+
+// relancer le wake lock quand on revient sur l'appli
+document.addEventListener('visibilitychange', async () => {
+  if (running && document.visibilityState === 'visible') { try { wakeLock = await navigator.wakeLock?.request('screen'); } catch (e) {} }
+});
+
+/* =========================================================================
+   Interface
+   ========================================================================= */
+async function afterConnect() {
+  try { await loadLights(); }
+  catch (e) {
+    setStatus('bridgeStatus', 'Connexion au pont perdue (' + (e.message || 'réseau') + '). Vérifie le Wi-Fi ou reconnecte-toi.', 'err');
+    if (!cfg.user) return showSetup();
+    return;
+  }
+  $('bridgeSetup').classList.add('hidden'); $('bridgeOk').classList.remove('hidden');
+  $('ipLabel').textContent = cfg.user === DEMO ? '(démo)' : cfg.ip;
+  setStatus('bridgeStatus', '');
+  for (const c of ['cardLights', 'cardSource', 'cardFx', 'cardLive']) $(c).classList.remove('hidden');
+  renderRooms();
+}
+function showSetup() {
+  $('bridgeSetup').classList.remove('hidden'); $('bridgeOk').classList.add('hidden');
+  for (const c of ['cardLights', 'cardSource', 'cardFx', 'cardLive']) $(c).classList.add('hidden');
+}
+
+function bindSlider(id, out, fmt) {
+  const el = $(id); el.value = cfg[id];
+  const upd = () => { cfg[id] = +el.value; $(out).textContent = fmt(cfg[id]); save(); };
+  el.addEventListener('input', upd); upd();
+}
+
+function init() {
+  $('ip').value = cfg.ip; updateCertLink();
+  $('ip').addEventListener('input', updateCertLink);
+  $('btnDiscover').onclick = discover;
+  $('btnPair').onclick = pair;
+  $('btnDemo').onclick = () => { cfg.user = DEMO; save(); afterConnect(); };
+  $('btnForget').onclick = async () => { if (running) await stop(); cfg.user = ''; save(); showSetup(); };
+  $('room').onchange = e => { cfg.room = e.target.value; cfg.selected = []; renderLights(); };
+  $('lights').addEventListener('change', e => {
+    const id = e.target.dataset.id; if (!id) return;
+    cfg.selected = e.target.checked ? [...new Set([...cfg.selected, id])] : cfg.selected.filter(x => x !== id);
+    save(); renderStage();
+  });
+  $('modes').addEventListener('click', e => { const t = e.target.closest('[data-mode]'); if (!t) return; cfg.mode = t.dataset.mode; save(); renderPickers(); });
+  $('palettes').addEventListener('click', e => { const t = e.target.closest('[data-pal]'); if (!t) return; cfg.palette = t.dataset.pal; save(); renderPickers(); });
+  $('sources').addEventListener('click', e => { const t = e.target.closest('[data-src]'); if (!t || running) return; cfg.src = t.dataset.src; save(); renderPickers(); });
+  bindSlider('sens', 'vSens', v => v + '/10');
+  bindSlider('maxBri', 'vMax', v => v + ' %');
+  bindSlider('minBri', 'vMin', v => v + ' %');
+  bindSlider('speed', 'vSpeed', v => v + '/10');
+  bindSlider('rate', 'vRate', v => v);
+  bindSlider('smooth', 'vSmooth', v => ['instantané', '0,1 s', '0,2 s', '0,3 s', '0,4 s'][v]);
+  $('rate').addEventListener('change', () => { if (running) { clearInterval(sender.timer); sender.timer = setInterval(sendTick, 1000 / cfg.rate); } });
+  $('restore').checked = cfg.restore; $('restore').onchange = e => { cfg.restore = e.target.checked; save(); };
+  $('btnStart').onclick = () => running ? stop() : start();
+  if (!navigator.mediaDevices?.getDisplayMedia) $('sources').children[1].querySelector('small').textContent = 'Non disponible sur ce téléphone (PC uniquement)';
+  renderPickers();
+  if (cfg.user) afterConnect();
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+init();
+</script>
+</body>
+</html>
